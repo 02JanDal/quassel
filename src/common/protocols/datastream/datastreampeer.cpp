@@ -27,7 +27,7 @@
 
 using namespace Protocol;
 
-DataStreamPeer::DataStreamPeer(::AuthHandler *authHandler, QTcpSocket *socket, quint16 features, Compressor::CompressionLevel level, QObject *parent)
+DataStreamPeer::DataStreamPeer(::AuthHandler *authHandler, SocketInterface *socket, quint16 features, Compressor::CompressionLevel level, QObject *parent)
     : RemotePeer(authHandler, socket, level, parent)
 {
     Q_UNUSED(features);

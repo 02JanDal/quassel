@@ -23,6 +23,7 @@
 
 #include <QTcpSocket>
 
+#include "socket.h"
 #include "protocol.h"
 
 class Peer;
@@ -34,7 +35,7 @@ class AuthHandler : public QObject
 public:
     AuthHandler(QObject *parent = 0);
 
-    QTcpSocket *socket() const;
+    SocketInterface *socket() const;
 
     bool isLocal() const;
 
@@ -61,7 +62,7 @@ signals:
     void socketError(QAbstractSocket::SocketError error, const QString &errorString);
 
 protected:
-    void setSocket(QTcpSocket *socket);
+    void setSocket(SocketInterface *socket);
 
 protected slots:
     virtual void onSocketError(QAbstractSocket::SocketError error);
@@ -70,7 +71,7 @@ protected slots:
 private:
     void invalidMessage();
 
-    QTcpSocket *_socket; // FIXME: should be a QSharedPointer? -> premature disconnect before the peer has taken over
+    SocketInterface *_socket; // FIXME: should be a QSharedPointer? -> premature disconnect before the peer has taken over
     bool _disconnectedSent;
 };
 

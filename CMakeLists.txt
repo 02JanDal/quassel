@@ -56,6 +56,10 @@ add_feature_info(WANT_CORE WANT_CORE "Build the core (server) binary")
 add_feature_info(WANT_QTCLIENT WANT_QTCLIENT "Build the client-only binary (requires a core to connect to)")
 add_feature_info(WANT_MONO WANT_MONO "Build the monolithic (all-in-one) binary")
 
+# Build websockets?
+option(WITH_WEBSOCKETS "Build the core with WebSockets support" OFF)
+add_feature_info(WITH_WEBSOCKETS WITH_WEBSOCKETS "Build the core with WebSockets support")
+
 # Whether to enable KDE integration (pulls in kdelibs and friends as a dependency); requires Qt4 for now
 cmake_dependent_option(WITH_KDE "KDE4 integration" OFF "USE_QT4" OFF)
 add_feature_info(WITH_KDE WITH_KDE "Enable KDE4 integration")
@@ -161,6 +165,13 @@ if (USE_QT5)
     set_package_properties(Qt5Network PROPERTIES TYPE REQUIRED
         DESCRIPTION "the network module for Qt5"
     )
+
+	if(WITH_WEBSOCKETS)
+		find_package(Qt5WebSockets QUIET)
+		set_package_properties(Qt5WebSockets PROPERTIES TYPE REQUIRED
+			DESCRIPTION "the websockets module for Qt5"
+		)
+	endif()
 
     if (BUILD_GUI)
         find_package(Qt5Gui QUIET)

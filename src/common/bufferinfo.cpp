@@ -69,6 +69,17 @@ bool BufferInfo::acceptsRegularMessages() const
     return true;
 }
 
+QVariant BufferInfo::toVariant() const
+{
+    QVariantMap map;
+    map.insert("id", _bufferId.toVariant());
+    map.insert("network", _netid.toVariant());
+    map.insert("type", _type);
+    map.insert("groupId", _groupId);
+    map.insert("bufferName", _bufferName);
+    return map;
+}
+
 
 QDebug operator<<(QDebug dbg, const BufferInfo &b)
 {

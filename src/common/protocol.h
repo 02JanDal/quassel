@@ -31,7 +31,8 @@ const quint32 magic = 0x42b33f00;
 
 enum Type {
     LegacyProtocol = 0x01,
-    DataStreamProtocol = 0x02
+    DataStreamProtocol = 0x02,
+    WebSocketProtocol = 0x04
 };
 
 

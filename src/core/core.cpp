@@ -46,6 +46,10 @@
 #  include <sys/stat.h>
 #endif /* HAVE_UMASK */
 
+#ifdef WITH_WEBSOCKETS
+#  include <QWebSocket>
+#endif
+
 // ==============================
 //  Custom Events
 // ==============================
@@ -84,6 +88,9 @@ void Core::destroy()
 Core::Core()
     : QObject(),
       _storage(0)
+    #ifdef WITH_WEBSOCKETS
+    , _websocketServer(new QWebSocketServer("Quassel", QWebSocketServer::NonSecureMode, this))
+    #endif
 {
 #ifdef HAVE_UMASK
     umask(S_IRWXG | S_IRWXO);
@@ -209,6 +216,13 @@ void Core::init()
 
     connect(&_server, SIGNAL(newConnection()), this, SLOT(incomingConnection()));
     connect(&_v6server, SIGNAL(newConnection()), this, SLOT(incomingConnection()));
+#ifdef WITH_WEBSOCKETS
+    connect(_websocketServer, SIGNAL(newConnection()), this, SLOT(incomingConnection()));
+    connect(_websocketServer, SIGNAL(acceptError(QAbstractSocket::SocketError)), this, SLOT(websocketAcceptError(QAbstractSocket::SocketError)));
+    connect(_websocketServer, SIGNAL(serverError(QWebSocketProtocol::CloseCode)), this, SLOT(websocketServerError(QWebSocketProtocol::CloseCode)));
+    connect(_websocketServer, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(websocketError()));
+    connect(_websocketServer, SIGNAL(peerVerifyError(QSslError)), this, SLOT(websocketError()));
+#endif
     if (!startListening()) exit(1);  // TODO make this less brutal
 
     if (Quassel::isOptionSet("oidentd"))
@@ -444,6 +458,36 @@ bool Core::startListening()
     if (listen_list.size() > 0) {
         foreach(const QString listen_term, listen_list) { // TODO: handle multiple interfaces for same TCP version gracefully
             QHostAddress addr;
+#ifdef WITH_WEBSOCKETS
+            if (listen_term.startsWith("websocket:")) {
+                QString address = listen_term.mid(QString("websocket:").size());
+                uint websocketPort = address.mid(address.indexOf('#')+1).toUInt();
+                address = address.left(address.indexOf('#'));
+                if (!addr.setAddress(address)) {
+                    qCritical() << qPrintable(
+                                       tr("Invalid listen address %1")
+                                       .arg(address)
+                                       );
+                }
+                else {
+                    if (_websocketServer->listen(addr, websocketPort)) {
+                        quInfo() << qPrintable(
+                                        tr("Listening for WebSocket clients on %1 port %2")
+                                        .arg(_websocketServer->serverAddress().toString())
+                                        .arg(_websocketServer->serverPort())
+                                        );
+                        success = true;
+                    }
+                    else
+                        quWarning() << qPrintable(
+                                           tr("Could not open WebSocket interface %1:%2: %3")
+                                           .arg(addr.toString())
+                                           .arg(websocketPort)
+                                           .arg(_websocketServer->errorString()));
+                }
+                continue;
+            }
+#endif
             if (!addr.setAddress(listen_term)) {
                 qCritical() << qPrintable(
                     tr("Invalid listen address %1")
@@ -517,6 +561,12 @@ void Core::stopListening(const QString &reason)
         wasListening = true;
         _v6server.close();
     }
+#ifdef WITH_WEBSOCKETS
+    if (_websocketServer->isListening()) {
+        wasListening = true;
+        _websocketServer->close();
+    }
+#endif
     if (wasListening) {
         if (reason.isEmpty())
             quInfo() << "No longer listening for GUI clients.";
@@ -528,12 +578,35 @@ void Core::stopListening(const QString &reason)
 
 void Core::incomingConnection()
 {
+#ifdef WITH_WEBSOCKETS
+    QWebSocketServer *websocketServer = qobject_cast<QWebSocketServer *>(sender());
+    if (websocketServer)
+    {
+        while (websocketServer->hasPendingConnections()) {
+            QWebSocket *socket = websocketServer->nextPendingConnection();
+
+            CoreAuthHandler *handler = new CoreAuthHandler(new WebSocketSocket(socket), this);
+            _connectingClients.insert(handler);
+
+            connect(handler, SIGNAL(disconnected()), SLOT(clientDisconnected()));
+            connect(handler, SIGNAL(socketError(QAbstractSocket::SocketError,QString)), SLOT(socketError(QAbstractSocket::SocketError,QString)));
+            connect(handler, SIGNAL(handshakeComplete(RemotePeer*,UserId)), this, SLOT(setupClientSession(RemotePeer*,UserId)));
+
+            quInfo() << qPrintable(tr("WebSocket client connected from")) << qPrintable(socket->peerAddress().toString());
+
+            if (!_configured) {
+                stopListening(tr("Closing server for basic setup"));
+            }
+        }
+        return;
+    }
+#endif
     QTcpServer *server = qobject_cast<QTcpServer *>(sender());
     Q_ASSERT(server);
     while (server->hasPendingConnections()) {
         QTcpSocket *socket = server->nextPendingConnection();
 
-        CoreAuthHandler *handler = new CoreAuthHandler(socket, this);
+        CoreAuthHandler *handler = new CoreAuthHandler(new TcpSocket(socket), this);
         _connectingClients.insert(handler);
 
         connect(handler, SIGNAL(disconnected()), SLOT(clientDisconnected()));
@@ -599,6 +672,22 @@ void Core::setupClientSession(RemotePeer *peer, UserId uid)
     QCoreApplication::postEvent(this, new AddClientEvent(peer, uid));
 }
 
+#ifdef WITH_WEBSOCKETS
+void Core::websocketServerError(const QWebSocketProtocol::CloseCode error)
+{
+    quError() << "WebSocket server error:" << _websocketServer->errorString();
+}
+
+void Core::websocketAcceptError(const QAbstractSocket::SocketError error)
+{
+    quError() << "WebSocket accept error:" << _websocketServer->errorString();
+}
+
+void Core::websocketError()
+{
+    quError() << "WebSocket other error:" << _websocketServer->errorString();
+}
+#endif
 
 void Core::customEvent(QEvent *event)
 {

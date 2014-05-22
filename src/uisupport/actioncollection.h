@@ -95,12 +95,10 @@ signals:
     void actionHovered(QAction *action);
     void actionTriggered(QAction *action);
 
+protected: // FIXME I just broke Qt 4 support...
+	virtual void connectNotify(const QMetaMethod &method);
+
 protected slots:
-#if QT_VERSION >= 0x050000
-    virtual void connectNotify(const QMetaMethod &method);
-#else
-    virtual void connectNotify(const char *signal);
-#endif
     virtual void slotActionTriggered();
 
 private slots:

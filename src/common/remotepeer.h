@@ -27,6 +27,7 @@
 #include "peer.h"
 #include "protocol.h"
 #include "signalproxy.h"
+#include "socket.h"
 
 class QTimer;
 
@@ -41,7 +42,7 @@ public:
     using Peer::handle;
     using Peer::dispatch;
 
-    RemotePeer(AuthHandler *authHandler, QTcpSocket *socket, Compressor::CompressionLevel level, QObject *parent = 0);
+    RemotePeer(AuthHandler *authHandler, SocketInterface *socket, Compressor::CompressionLevel level, QObject *parent = 0);
 
     void setSignalProxy(SignalProxy *proxy);
 
@@ -59,7 +60,7 @@ public:
     bool compressionEnabled() const;
     void setCompressionEnabled(bool enabled);
 
-    QTcpSocket *socket() const;
+    SocketInterface *socket() const;
 
 public slots:
     void close(const QString &reason = QString());
@@ -96,7 +97,7 @@ private:
     bool readMessage(QByteArray &msg);
 
 private:
-    QTcpSocket *_socket;
+    SocketInterface *_socket;
     Compressor *_compressor;
     SignalProxy *_signalProxy;
     QTimer *_heartBeatTimer;

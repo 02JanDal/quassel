@@ -35,6 +35,10 @@ if (HAVE_SYSLOG)
     add_definitions(-DHAVE_SYSLOG)
 endif()
 
+if (WITH_WEBSOCKETS)
+    set(CORE_QT_MODULES WebSockets)
+endif()
+
 if(WANT_CORE)
   add_executable(quasselcore common/main.cpp ${CORE_DEPS} ${COMMON_DEPS})
   qt_use_modules(quasselcore Core Network ${CORE_QT_MODULES})
@@ -48,6 +52,10 @@ endif(WANT_CORE)
 
 if (KDE4_FOUND)
     include_directories(${KDE4_INCLUDES})
+endif()
+
+if (USE_QT5)
+    set(CLIENT_QT_MODULES Widgets)
 endif()
 
 if(WANT_QTCLIENT)

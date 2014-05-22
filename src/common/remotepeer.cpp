@@ -35,7 +35,7 @@ using namespace Protocol;
 
 const quint32 maxMessageSize = 64 * 1024 * 1024; // This is uncompressed size. 64 MB should be enough for any sort of initData or backlog chunk
 
-RemotePeer::RemotePeer(::AuthHandler *authHandler, QTcpSocket *socket, Compressor::CompressionLevel level, QObject *parent)
+RemotePeer::RemotePeer(::AuthHandler *authHandler, SocketInterface *socket, Compressor::CompressionLevel level, QObject *parent)
     : Peer(authHandler, parent),
     _socket(socket),
     _compressor(new Compressor(socket, level, this)),
@@ -51,9 +51,11 @@ RemotePeer::RemotePeer(::AuthHandler *authHandler, QTcpSocket *socket, Compresso
     connect(socket, SIGNAL(disconnected()), SIGNAL(disconnected()));
 
 #ifdef HAVE_SSL
-    QSslSocket *sslSocket = qobject_cast<QSslSocket *>(socket);
-    if (sslSocket)
-        connect(sslSocket, SIGNAL(encrypted()), SIGNAL(secureStateChanged()));
+    if (TcpSocket *s = qobject_cast<TcpSocket *>(socket)) {
+        QSslSocket *sslSocket = qobject_cast<QSslSocket *>(s->_socket);
+        if (sslSocket)
+            connect(sslSocket, SIGNAL(encrypted()), SIGNAL(secureStateChanged()));
+    }
 #endif
 
     connect(_compressor, SIGNAL(readyRead()), SLOT(onReadyRead()));
@@ -140,7 +142,7 @@ int RemotePeer::lag() const
 }
 
 
-QTcpSocket *RemotePeer::socket() const
+SocketInterface *RemotePeer::socket() const
 {
     return _socket;
 }

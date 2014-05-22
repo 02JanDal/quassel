@@ -30,20 +30,25 @@
 #    include "../../3rdparty/miniz/miniz.c"
 #endif
 
+#include "socket.h"
+
 const int maxBufferSize = 64 * 1024 * 1024; // protect us from zip bombs
 const int ioBufferSize = 64 * 1024;         // chunk size for inflate/deflate; should not be too large as we preallocate that space!
 
-Compressor::Compressor(QTcpSocket *socket, Compressor::CompressionLevel level, QObject *parent)
+Compressor::Compressor(SocketInterface *socket, Compressor::CompressionLevel level, QObject *parent)
     : QObject(parent),
     _socket(socket),
     _level(level),
     _inflater(0),
     _deflater(0)
 {
-    connect(socket, SIGNAL(readyRead()), SLOT(readData()));
+    if (_level == DisabledCompression)
+        return;
+
+    connect(this->socket(), SIGNAL(readyRead()), SLOT(readData()));
 
     bool ok = true;
-    if (level != NoCompression)
+    if (level != NoCompression && level != DisabledCompression)
         ok = initStreams();
 
     if (!ok) {
@@ -54,7 +59,7 @@ Compressor::Compressor(QTcpSocket *socket, Compressor::CompressionLevel level, Q
 
     // It's possible that more data has already arrived during the handshake, so readyRead() wouldn't be triggered.
     // However, we want to give RemotePeer a chance to connect to our signals, so trigger this asynchronously.
-    if (socket->bytesAvailable())
+    if (this->socket()->bytesAvailable())
         QTimer::singleShot(0, this, SLOT(readData()));
 }
 
@@ -132,7 +137,7 @@ qint64 Compressor::read(char *data, qint64 maxSize)
         _readBuffer = _readBuffer.mid(n);
 
     // If there's still data left in the socket buffer, make sure to schedule a read
-    if (_socket->bytesAvailable())
+    if (socket()->bytesAvailable())
         QTimer::singleShot(0, this, SLOT(readData()));
 
     return n;
@@ -156,16 +161,19 @@ qint64 Compressor::write(const char *data, qint64 count, WriteBufferHint flush)
 
 
 void Compressor::readData()
-{
+{	
     // don't try to read more data if we're already closing
     if (_socket->state() !=  QAbstractSocket::ConnectedState)
         return;
 
-    if (!_socket->bytesAvailable() || _readBuffer.size() >= maxBufferSize)
+    if (_level == DisabledCompression)
+        return;
+
+    if (!socket()->bytesAvailable() || _readBuffer.size() >= maxBufferSize)
         return;
 
     if (compressionLevel() == NoCompression) {
-        _readBuffer.append(_socket->read(maxBufferSize - _readBuffer.size()));
+        _readBuffer.append(socket()->read(maxBufferSize - _readBuffer.size()));
         emit readyRead();
         return;
     }
@@ -176,9 +184,9 @@ void Compressor::readData()
     // considering that otherwise (using an intermediate buffer) we'd copy around data for every single message.
     // TODO: Benchmark if it would still make sense to squeeze the buffer from time to time (e.g. after initial sync)!
 
-    while (_socket->bytesAvailable() && _readBuffer.size() + ioBufferSize < maxBufferSize && _inputBuffer.size() < ioBufferSize) {
+	while (socket()->bytesAvailable() && _readBuffer.size() + ioBufferSize < maxBufferSize && _inputBuffer.size() < ioBufferSize) {
         _readBuffer.resize(_readBuffer.size() + ioBufferSize);
-        _inputBuffer.append(_socket->read(ioBufferSize - _inputBuffer.size()));
+		_inputBuffer.append(socket()->read(ioBufferSize - _inputBuffer.size()));
 
         _inflater->next_in = reinterpret_cast<unsigned char *>(_inputBuffer.data());
         _inflater->avail_in = _inputBuffer.size();
@@ -224,7 +232,7 @@ void Compressor::readData()
 void Compressor::writeData()
 {
     if (compressionLevel() == NoCompression) {
-        _socket->write(_writeBuffer);
+		socket()->write(_writeBuffer);
         _writeBuffer.clear();
         return;
     }
@@ -246,7 +254,7 @@ void Compressor::writeData()
         if (_deflater->avail_out == static_cast<unsigned int>(ioBufferSize))
             continue; // nothing to write here
 
-        if (!_socket->write(_outputBuffer.constData(), ioBufferSize - _deflater->avail_out)) {
+        if (!socket()->write(_outputBuffer.constData(), ioBufferSize - _deflater->avail_out)) {
             qWarning() << "Error while writing to socket:" << _socket->errorString();
             emit error(DeviceError);
             return;
@@ -270,4 +278,9 @@ void Compressor::flush()
         _socket->flush();
 
     // FIXME: missing impl for enabled compression; but then we're not using this method yet
+}
+
+QTcpSocket *Compressor::socket()
+{
+    return qobject_cast<TcpSocket *>(_socket)->_socket;
 }

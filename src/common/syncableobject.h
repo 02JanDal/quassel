@@ -68,6 +68,7 @@ public:
      *  \return The object's state in a QVariantMap
      */
     virtual QVariantMap toVariantMap();
+    inline QVariant toVariant() { return toVariantMap(); }
 
     //! Initialize the object's state from a given QVariantMap.
     /** \see toVariantMap() for important information concerning this method.

@@ -41,6 +41,7 @@ set(SOURCES
 )
 
 set(LIBS )
+set(CORE_EXTRA_QT_MODULES )
 
 if(HAVE_SSL)
   set(SOURCES ${SOURCES} sslserver.cpp)
@@ -54,13 +55,18 @@ if (QCA2_FOUND)
     list(APPEND LIBS ${QCA2_LIBRARIES})
 endif()
 
+if (WITH_WEBSOCKETS)
+    add_definitions(-DWITH_WEBSOCKETS)
+    set(CORE_EXTRA_QT_MODULES WebSockets)
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/src/common)
 
 set(CORE_RCS ${CORE_RCS} ${CMAKE_CURRENT_SOURCE_DIR}/sql.qrc)
 qt_add_resources(SOURCES ${CORE_RCS})
 
 add_library(mod_core STATIC ${SOURCES})
-qt_use_modules(mod_core Core Network Script Sql)
+qt_use_modules(mod_core Core Network Script Sql ${CORE_EXTRA_QT_MODULES})
 
 add_dependencies(mod_core mod_common)
 

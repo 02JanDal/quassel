@@ -24,6 +24,7 @@
 #include <QObject>
 
 class QTcpSocket;
+class SocketInterface;
 
 #ifdef HAVE_ZLIB
     typedef struct z_stream_s *z_streamp;
@@ -37,6 +38,7 @@ class Compressor : public QObject
 
 public:
     enum CompressionLevel {
+        DisabledCompression,
         NoCompression,
         DefaultCompression,
         BestCompression,
@@ -54,7 +56,7 @@ public:
         Flush
     };
 
-    Compressor(QTcpSocket *socket, CompressionLevel level, QObject *parent = 0);
+    Compressor(SocketInterface *socket, CompressionLevel level, QObject *parent = 0);
     ~Compressor();
 
     CompressionLevel compressionLevel() const { return _level; }
@@ -65,6 +67,8 @@ public:
     qint64 write(const char *data, qint64 count, WriteBufferHint flush = Flush);
 
     void flush();
+
+    QTcpSocket *socket();
 
 signals:
     void readyRead();
@@ -78,7 +82,7 @@ private:
     void writeData();
 
 private:
-    QTcpSocket *_socket;
+    SocketInterface *_socket;
     CompressionLevel _level;
 
     QByteArray _readBuffer;

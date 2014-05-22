@@ -61,6 +61,8 @@ public:
     QString bufferName() const;
     bool acceptsRegularMessages() const;
 
+    QVariant toVariant() const;
+
     inline bool operator==(const BufferInfo &other) const { return _bufferId == other._bufferId; }
 
 private:

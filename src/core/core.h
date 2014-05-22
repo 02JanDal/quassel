@@ -34,6 +34,10 @@
 #  include <QTcpServer>
 #endif
 
+#ifdef WITH_WEBSOCKETS
+#  include <QWebSocketServer>
+#endif
+
 #include "bufferinfo.h"
 #include "message.h"
 #include "oidentdconfiggenerator.h"
@@ -524,6 +528,12 @@ private slots:
     void socketError(QAbstractSocket::SocketError err, const QString &errorString);
     void setupClientSession(RemotePeer *, UserId);
 
+#ifdef WITH_WEBSOCKETS
+    void websocketServerError(const QWebSocketProtocol::CloseCode error);
+    void websocketAcceptError(const QAbstractSocket::SocketError error);
+    void websocketError();
+#endif
+
 private:
     Core();
     ~Core();
@@ -555,6 +565,10 @@ private:
     SslServer _server, _v6server;
 #else
     QTcpServer _server, _v6server;
+#endif
+
+#ifdef WITH_WEBSOCKETS
+    QWebSocketServer *_websocketServer;
 #endif
 
     OidentdConfigGenerator *_oidentdConfigGenerator;

@@ -35,6 +35,7 @@ class ClientAuthHandler : public AuthHandler
 
 public:
     ClientAuthHandler(CoreAccount account, QObject *parent = 0);
+    ~ClientAuthHandler();
 
 public slots:
     void connectToCore();
@@ -70,6 +71,8 @@ signals:
 
 private:
     using AuthHandler::handle;
+
+    QTcpSocket *socket() const;
 
     void handle(const Protocol::ClientDenied &msg);
     void handle(const Protocol::ClientRegistered &msg);

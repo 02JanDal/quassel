@@ -22,24 +22,27 @@
 
 #include "protocols/datastream/datastreampeer.h"
 #include "protocols/legacy/legacypeer.h"
-
+#ifdef WITH_WEBSOCKETS
+#  include "protocols/websockets/websocketpeer.h"
+#endif
 
 PeerFactory::ProtoList PeerFactory::supportedProtocols()
 {
     ProtoList result;
     result.append(ProtoDescriptor(Protocol::DataStreamProtocol, DataStreamPeer::supportedFeatures()));
     result.append(ProtoDescriptor(Protocol::LegacyProtocol, 0));
+#ifdef WITH_WEBSOCKETS
+    result.append(ProtoDescriptor(Protocol::WebSocketProtocol, WebSocketPeer::supportedFeatures()));
+#endif
     return result;
 }
 
-
-RemotePeer *PeerFactory::createPeer(const ProtoDescriptor &protocol, AuthHandler *authHandler, QTcpSocket *socket, Compressor::CompressionLevel level, QObject *parent)
+RemotePeer *PeerFactory::createPeer(const ProtoDescriptor &protocol, AuthHandler *authHandler, SocketInterface *socket, Compressor::CompressionLevel level, QObject *parent)
 {
     return createPeer(ProtoList() << protocol, authHandler, socket, level, parent);
 }
 
-
-RemotePeer *PeerFactory::createPeer(const ProtoList &protocols, AuthHandler *authHandler, QTcpSocket *socket, Compressor::CompressionLevel level, QObject *parent)
+RemotePeer *PeerFactory::createPeer(const ProtoList &protocols, AuthHandler *authHandler, SocketInterface *socket, Compressor::CompressionLevel level, QObject *parent)
 {
     foreach(const ProtoDescriptor &protodesc, protocols) {
         Protocol::Type proto = protodesc.first;
@@ -51,6 +54,12 @@ RemotePeer *PeerFactory::createPeer(const ProtoList &protocols, AuthHandler *aut
                 if (DataStreamPeer::acceptsFeatures(features))
                     return new DataStreamPeer(authHandler, socket, features, level, parent);
                 break;
+#ifdef WITH_WEBSOCKETS
+            case Protocol::WebSocketProtocol:
+                if (WebSocketPeer::acceptsFeatures(features))
+                    return new WebSocketPeer(authHandler, socket, features, level, parent);
+                break;
+#endif
             default:
                 break;
         }

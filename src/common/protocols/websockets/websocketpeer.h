@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2005-2014 by the Quassel Project                        *
+ *   Copyright (C) 2014 by the Quassel Project                             *
  *   devel@quassel-irc.org                                                 *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -18,31 +18,26 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.         *
  ***************************************************************************/
 
-#ifndef DATASTREAMPEER_H
-#define DATASTREAMPEER_H
+#ifndef WEBSOCKETPEER_H
+#define WEBSOCKETPEER_H
 
 #include "../../remotepeer.h"
 
 class QDataStream;
 
-class DataStreamPeer : public RemotePeer
+class WebSocketPeer : public RemotePeer
 {
     Q_OBJECT
 
 public:
-    enum RequestType {
-        Sync = 1,
-        RpcCall,
-        InitRequest,
-        InitData,
-        HeartBeat,
-        HeartBeatReply
+    WebSocketPeer(AuthHandler *authHandler, SocketInterface *socket, quint16 features, Compressor::CompressionLevel level, QObject *parent = 0);
+
+    Protocol::Type protocol() const { return Protocol::WebSocketProtocol; }
+    QString protocolName() const { return "the WebSocket protocol"; }
+
+    enum Features {
+        Raw = 0x1
     };
-
-    DataStreamPeer(AuthHandler *authHandler, SocketInterface *socket, quint16 features, Compressor::CompressionLevel level, QObject *parent = 0);
-
-    Protocol::Type protocol() const { return Protocol::DataStreamProtocol; }
-    QString protocolName() const { return "the DataStream protocol"; }
 
     static quint16 supportedFeatures();
     static bool acceptsFeatures(quint16 peerFeatures);
@@ -67,18 +62,25 @@ public:
     void dispatch(const Protocol::HeartBeat &msg);
     void dispatch(const Protocol::HeartBeatReply &msg);
 
+public slots:
+    void send(const QJsonObject &obj);
+
 signals:
     void protocolError(const QString &errorString);
 
+private slots:
+    void messageReceived(const QString &msg);
+
 private:
-    using RemotePeer::writeMessage;
-    void writeMessage(const QVariantMap &handshakeMsg);
-    void writeMessage(const QVariantList &sigProxyMsg);
     void processMessage(const QByteArray &msg);
 
-    void handleHandshakeMessage(const QVariantList &mapData);
-    void handlePackedFunc(const QVariantList &packedFunc);
-    void dispatchPackedFunc(const QVariantList &packedFunc);
+    QJsonDocument parseJson(const QByteArray &data) const;
+
+    quint16 _features;
+
+    QWebSocket *socket();
+
+    static inline QString datetimeFormat() { return QString("dd:MM:yyyy HH:mm:ss.zzz"); }
 };
 
 #endif

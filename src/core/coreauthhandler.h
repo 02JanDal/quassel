@@ -31,7 +31,7 @@ class CoreAuthHandler : public AuthHandler
     Q_OBJECT
 
 public:
-    CoreAuthHandler(QTcpSocket *socket, QObject *parent = 0);
+    CoreAuthHandler(SocketInterface *socket, QObject *parent = 0);
 
 signals:
     void handshakeComplete(RemotePeer *peer, UserId uid);
@@ -50,6 +50,9 @@ private:
 
 private slots:
     void onReadyRead();
+#ifdef WITH_WEBSOCKETS
+    void onMessageReceived(const QString &message);
+#endif
 
 #ifdef HAVE_SSL
     void onSslErrors();

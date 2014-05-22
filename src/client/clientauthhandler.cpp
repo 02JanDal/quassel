@@ -47,6 +47,11 @@ ClientAuthHandler::ClientAuthHandler(CoreAccount account, QObject *parent)
 
 }
 
+ClientAuthHandler::~ClientAuthHandler()
+{
+    socket()->setParent(0);
+}
+
 
 void ClientAuthHandler::connectToCore()
 {
@@ -79,7 +84,7 @@ void ClientAuthHandler::connectToCore()
     }
 #endif
 
-    setSocket(socket);
+    setSocket(new TcpSocket(socket));
     connect(socket, SIGNAL(stateChanged(QAbstractSocket::SocketState)), SLOT(onSocketStateChanged(QAbstractSocket::SocketState)));
     connect(socket, SIGNAL(readyRead()), SLOT(onReadyRead()));
     connect(socket, SIGNAL(connected()), SLOT(onSocketConnected()));
@@ -197,7 +202,7 @@ void ClientAuthHandler::onSocketConnected()
 
     qDebug() << "Legacy core detected, switching to compatibility mode";
 
-    RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(Protocol::LegacyProtocol, 0), this, socket(), Compressor::NoCompression, this);
+    RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(Protocol::LegacyProtocol, 0), this, new TcpSocket(socket()), Compressor::NoCompression, this);
     // Only needed for the legacy peer, as all others check the protocol version before instantiation
     connect(peer, SIGNAL(protocolVersionMismatch(int,int)), SLOT(onProtocolVersionMismatch(int,int)));
 
@@ -230,7 +235,7 @@ void ClientAuthHandler::onReadyRead()
     else
         level = Compressor::NoCompression;
 
-    RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(type, protoFeatures), this, socket(), level, this);
+    RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(type, protoFeatures), this, new TcpSocket(socket()), level, this);
     if (!peer) {
         qWarning() << "No valid protocol supported for this core!";
         emit errorPopup(tr("<b>Incompatible Quassel Core!</b><br>"
@@ -328,6 +333,10 @@ void ClientAuthHandler::setupCore(const SetupData &setupData)
     _peer->dispatch(setupData);
 }
 
+QTcpSocket *ClientAuthHandler::socket() const
+{
+    return qobject_cast<TcpSocket *>(AuthHandler::socket())->_socket;
+}
 
 void ClientAuthHandler::handle(const SetupFailed &msg)
 {

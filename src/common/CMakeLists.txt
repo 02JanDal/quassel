@@ -38,6 +38,7 @@ set(SOURCES
     transfer.cpp
     transfermanager.cpp
     util.cpp
+    socket.cpp
 
     protocols/datastream/datastreampeer.cpp
     protocols/legacy/legacypeer.cpp
@@ -46,6 +47,7 @@ set(SOURCES
     coreinfo.h
 )
 
+set(COMMON_EXTRA_QT_MODULES )
 
 if (QCA2_FOUND)
     set(SOURCES ${SOURCES} keyevent.cpp)
@@ -60,6 +62,12 @@ endif()
 
 if (HAVE_SYSLOG)
     add_definitions(-DHAVE_SYSLOG)
+endif()
+
+if (WITH_WEBSOCKETS)
+    add_definitions(-DWITH_WEBSOCKETS)
+    set(SOURCES ${SOURCES} protocols/websockets/websocketpeer.cpp)
+    set(COMMON_EXTRA_QT_MODULES WebSockets)
 endif()
 
 if(APPLE)
@@ -79,7 +87,7 @@ endif()
 qt_add_resources(SOURCES ${COMMON_RCS})
 
 add_library(mod_common STATIC ${SOURCES})
-qt_use_modules(mod_common Core Network)
+qt_use_modules(mod_common Core Network ${COMMON_EXTRA_QT_MODULES})
 
 if(APPLE)
   target_link_libraries(mod_common "-framework CoreServices" "-framework CoreFoundation")

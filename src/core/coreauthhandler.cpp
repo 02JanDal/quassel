@@ -27,9 +27,14 @@
 #include "core.h"
 #include "logger.h"
 
+#ifdef WITH_WEBSOCKETS
+#  include <QJsonDocument>
+#  include <QJsonObject>
+#endif
+
 using namespace Protocol;
 
-CoreAuthHandler::CoreAuthHandler(QTcpSocket *socket, QObject *parent)
+CoreAuthHandler::CoreAuthHandler(SocketInterface *socket, QObject *parent)
     : AuthHandler(parent),
     _peer(0),
     _magicReceived(false),
@@ -38,7 +43,14 @@ CoreAuthHandler::CoreAuthHandler(QTcpSocket *socket, QObject *parent)
     _connectionFeatures(0)
 {
     setSocket(socket);
-    connect(socket, SIGNAL(readyRead()), SLOT(onReadyRead()));
+    if (TcpSocket *s = qobject_cast<TcpSocket *>(this->socket())) {
+        connect(s->_socket, SIGNAL(readyRead()), this, SLOT(onReadyRead()));
+    }
+#ifdef WITH_WEBSOCKETS
+    else if (WebSocketSocket *s = qobject_cast<WebSocketSocket *>(this->socket())) {
+        connect(s->_socket, SIGNAL(textMessageReceived(QString)), this, SLOT(onMessageReceived(QString)));
+    }
+#endif
 
     // TODO: Timeout for the handshake phase
 
@@ -47,7 +59,8 @@ CoreAuthHandler::CoreAuthHandler(QTcpSocket *socket, QObject *parent)
 
 void CoreAuthHandler::onReadyRead()
 {
-    if (socket()->bytesAvailable() < 4)
+    QTcpSocket *socket = qobject_cast<TcpSocket *>(this->socket())->_socket;
+    if (socket->bytesAvailable() < 4)
         return;
 
     // once we have selected a peer, we certainly don't want to read more data!
@@ -56,14 +69,14 @@ void CoreAuthHandler::onReadyRead()
 
     if (!_magicReceived) {
         quint32 magic;
-        socket()->peek((char*)&magic, 4);
+        socket->peek((char*)&magic, 4);
         magic = qFromBigEndian<quint32>(magic);
 
         if ((magic & 0xffffff00) != Protocol::magic) {
             // no magic, assume legacy protocol
             qDebug() << "Legacy client detected, switching to compatibility mode";
             _legacy = true;
-            RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(Protocol::LegacyProtocol, 0), this, socket(), Compressor::NoCompression, this);
+            RemotePeer *peer = PeerFactory::createPeer(PeerFactory::ProtoDescriptor(Protocol::LegacyProtocol, 0), this, new TcpSocket(socket), Compressor::NoCompression, this);
             connect(peer, SIGNAL(protocolVersionMismatch(int,int)), SLOT(onProtocolVersionMismatch(int,int)));
             setPeer(peer);
             return;
@@ -77,13 +90,13 @@ void CoreAuthHandler::onReadyRead()
         if (features & Protocol::Compression)
             _connectionFeatures |= Protocol::Compression;
 
-        socket()->read((char*)&magic, 4); // read the 4 bytes we've just peeked at
+        socket->read((char*)&magic, 4); // read the 4 bytes we've just peeked at
     }
 
     // read the list of protocols supported by the client
-    while (socket()->bytesAvailable() >= 4) {
+    while (socket->bytesAvailable() >= 4) {
         quint32 data;
-        socket()->read((char*)&data, 4);
+        socket->read((char*)&data, 4);
         data = qFromBigEndian<quint32>(data);
 
         Protocol::Type type = static_cast<Protocol::Type>(data & 0xff);
@@ -97,7 +110,7 @@ void CoreAuthHandler::onReadyRead()
             else
                 level = Compressor::NoCompression;
 
-            RemotePeer *peer = PeerFactory::createPeer(_supportedProtos, this, socket(), level, this);
+            RemotePeer *peer = PeerFactory::createPeer(_supportedProtos, this, new TcpSocket(socket), level, this);
             if (peer->protocol() == Protocol::LegacyProtocol) {
                 _legacy = true;
                 connect(peer, SIGNAL(protocolVersionMismatch(int,int)), SLOT(onProtocolVersionMismatch(int,int)));
@@ -107,23 +120,46 @@ void CoreAuthHandler::onReadyRead()
             // inform the client
             quint32 reply = peer->protocol() | peer->enabledFeatures()<<8 | _connectionFeatures<<24;
             reply = qToBigEndian<quint32>(reply);
-            socket()->write((char*)&reply, 4);
-            socket()->flush();
+            socket->write((char*)&reply, 4);
+            socket->flush();
 
             if (!_legacy && (_connectionFeatures & Protocol::Encryption))
                 startSsl(); // legacy peer enables it later
             return;
         }
-    }
+	}
 }
 
+#ifdef WITH_WEBSOCKETS
+void CoreAuthHandler::onMessageReceived(const QString &message)
+{
+    QWebSocket *socket = qobject_cast<WebSocketSocket *>(this->socket())->_socket;
+    const QJsonObject obj = QJsonDocument::fromJson(message.toUtf8()).object();
+    quint16 features = obj.value("features").toInt();
+    _supportedProtos.append(PeerFactory::ProtoDescriptor(Protocol::WebSocketProtocol, features));
+    RemotePeer *peer = PeerFactory::createPeer(_supportedProtos, this, new WebSocketSocket(socket), Compressor::DisabledCompression, this);
+    setPeer(peer);
+    QJsonObject out;
+    out.insert("type", "Features");
+    out.insert("features", peer->enabledFeatures());
+    socket->sendTextMessage(QString::fromUtf8(QJsonDocument(out).toJson()));
+    disconnect(socket, SIGNAL(textMessageReceived(QString)), this, SLOT(onMessageReceived(QString)));
+}
+#endif
 
 void CoreAuthHandler::setPeer(RemotePeer *peer)
 {
     qDebug().nospace() << "Using " << qPrintable(peer->protocolName()) << "...";
 
     _peer = peer;
-    disconnect(socket(), SIGNAL(readyRead()), this, SLOT(onReadyRead()));
+    if (TcpSocket *s = qobject_cast<TcpSocket *>(socket())) {
+        disconnect(s->_socket, SIGNAL(readyRead()), this, SLOT(onReadyRead()));
+    }
+#ifdef WITH_WEBSOCKETS
+    else if (WebSocketSocket *s = qobject_cast<WebSocketSocket *>(socket())) {
+        disconnect(s->_socket, SIGNAL(textMessageReceived(QString)), this, SLOT(onMessageReceived(QString)));
+    }
+#endif
 }
 
 // only in compat mode
